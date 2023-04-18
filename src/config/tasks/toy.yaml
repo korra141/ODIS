@@ -1,3 +1,6 @@
+
+
+
 # ----- marine battle setting config -----
 
 # get env information
@@ -9,8 +12,8 @@ train_tasks: ["3m"]
 train_tasks_data_quality: {
     "3m": "medium",
 }
-
-test_tasks: ["3m", "4m", "5m"]
+test_tasks: ["3m"]
+#test_tasks: ["3m", "4m", "5m"]
 test_tasks_data_quality: {
 }
 

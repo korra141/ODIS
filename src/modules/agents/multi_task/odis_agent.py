@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from utils.embed import polynomial_embed, binary_embed
 from utils.transformer import Transformer
+import pdb
 
 
 class ODISAgent(nn.Module):
@@ -21,6 +22,7 @@ class ODISAgent(nn.Module):
         self.skill_dim = args.skill_dim
 
         self.q = Qnet(args)
+        # print(task2input_shape_info)
         self.state_encoder = StateEncoder(task2input_shape_info, task2decomposer, task2n_agents, decomposer, args)
         self.obs_encoder = ObsEncoder(task2input_shape_info, task2decomposer, task2n_agents, decomposer, args)
         self.encoder = Encoder(args)
@@ -160,6 +162,7 @@ class StateEncoder(nn.Module):
             ally_states = th.cat([ally_states, compact_action_states], dim=-1)
 
         # do inference and get entity_embed
+        # print(f'task at hand:  {task}')
         ally_embed = self.ally_encoder(ally_states)
         enemy_embed = self.enemy_encoder(enemy_states)
 
@@ -184,6 +187,7 @@ class ObsEncoder(nn.Module):
 
     def __init__(self, task2input_shape_info, task2decomposer, task2n_agents, decomposer, args):
         super(ObsEncoder, self).__init__()
+        # pdb.set_trace()
         self.task2last_action_shape = {task: task2input_shape_info[task]["last_action_shape"] for task in
                                        task2input_shape_info}
         self.task2decomposer = task2decomposer
@@ -198,14 +202,17 @@ class ObsEncoder(nn.Module):
         obs_en_dim, obs_al_dim = decomposer.obs_nf_en, decomposer.obs_nf_al
         n_actions_no_attack = decomposer.n_actions_no_attack
         ## get wrapped obs_own_dim
-        wrapped_obs_own_dim = obs_own_dim + args.id_length + n_actions_no_attack + 1
+        #wrapped_obs_own_dim = obs_own_dim + args.id_length + n_actions_no_attack + 1
+        self.wrapped_obs_own_dim = 19
+        self.obs_al_dim_ = 8 
         ## enemy_obs ought to add attack_action_info
         obs_en_dim += 1
+        self.obs_en_dim_ = 9
+        print(f'obs_en_dim: {obs_en_dim}')
 
-        self.ally_value = nn.Linear(obs_al_dim, self.entity_embed_dim)
-        self.enemy_value = nn.Linear(obs_en_dim, self.entity_embed_dim)
-        self.own_value = nn.Linear(wrapped_obs_own_dim, self.entity_embed_dim)
-
+        self.ally_value = nn.Linear(self.obs_al_dim_, self.entity_embed_dim)
+        self.enemy_value = nn.Linear(self.obs_en_dim_, self.entity_embed_dim)
+        self.own_value = nn.Linear(self.wrapped_obs_own_dim, self.entity_embed_dim)
         self.transformer = Transformer(self.entity_embed_dim, args.head, args.depth, self.entity_embed_dim)
 
         # self.q_skill = nn.Linear(self.entity_embed_dim, self.skill_dim)
@@ -226,7 +233,7 @@ class ObsEncoder(nn.Module):
         obs_inputs, last_action_inputs, agent_id_inputs = inputs[:, :obs_dim], \
                                                           inputs[:, obs_dim:obs_dim + last_action_shape], inputs[:,
                                                                                                           obs_dim + last_action_shape:]
-
+        # pdb.set_trace()
         # decompose observation input
         own_obs, enemy_feats, ally_feats = task_decomposer.decompose_obs(
             obs_inputs)  # own_obs: [bs*self.n_agents, own_obs_dim]
@@ -242,14 +249,19 @@ class ObsEncoder(nn.Module):
         # incorporate agent_id embed and compact_action_states
         own_obs = th.cat([own_obs, agent_id_inputs, compact_action_states], dim=-1)
 
+        
+
         # incorporate attack_action_info into enemy_feats
         attack_action_info = attack_action_info.transpose(0, 1).unsqueeze(-1)
         enemy_feats = th.cat([th.stack(enemy_feats, dim=0), attack_action_info], dim=-1)
         ally_feats = th.stack(ally_feats, dim=0)
-
-        # compute key, query and value for attention
+        own_obs = F.pad(own_obs, pad=(0,self.wrapped_obs_own_dim-own_obs.shape[-1]))
+        enemy_feats = F.pad( enemy_feats,pad=(0,self.obs_en_dim_-enemy_feats.shape[-1]))
+        ally_feats = F.pad(ally_feats, pad=(0,self.obs_al_dim_-ally_feats.shape[-1]))
+	# compute key, query and value for attention
         own_hidden = self.own_value(own_obs).unsqueeze(1)
         ally_hidden = self.ally_value(ally_feats).permute(1, 0, 2)
+
         enemy_hidden = self.enemy_value(enemy_feats).permute(1, 0, 2)
         history_hidden = hidden_state
 
@@ -304,9 +316,13 @@ class Decoder(nn.Module):
         ## enemy_obs ought to add attack_action_info
         obs_en_dim += 1
 
-        self.ally_value = nn.Linear(obs_al_dim, self.entity_embed_dim)
-        self.enemy_value = nn.Linear(obs_en_dim, self.entity_embed_dim)
-        self.own_value = nn.Linear(wrapped_obs_own_dim, self.entity_embed_dim)
+        self.wrapped_obs_own_dim = 19
+        self.obs_al_dim_ = 8 
+        self.obs_en_dim_ = 9
+
+        self.ally_value = nn.Linear(self.obs_al_dim_, self.entity_embed_dim)
+        self.enemy_value = nn.Linear(self.obs_en_dim_, self.entity_embed_dim)
+        self.own_value = nn.Linear(self.wrapped_obs_own_dim, self.entity_embed_dim)
         # self.skill_value = nn.Linear(self.skill_dim, self.entity_embed_dim)
 
         self.transformer = Transformer(self.entity_embed_dim, args.head, args.depth, self.entity_embed_dim)
@@ -354,6 +370,10 @@ class Decoder(nn.Module):
 
         # compute key, query and value for attention
         # compute key, query and value for attention
+        own_obs = F.pad(own_obs, pad=(0,self.wrapped_obs_own_dim-own_obs.shape[-1]))
+        enemy_feats = F.pad( enemy_feats,pad=(0,self.obs_en_dim_-enemy_feats.shape[-1]))
+        ally_feats = F.pad(ally_feats, pad=(0,self.obs_al_dim_-ally_feats.shape[-1]))
+        
         own_hidden = self.own_value(own_obs).unsqueeze(1)
         ally_hidden = self.ally_value(ally_feats).permute(1, 0, 2)
         enemy_hidden = self.enemy_value(enemy_feats).permute(1, 0, 2)

@@ -118,6 +118,7 @@ def init_tasks(task_list, main_args, logger):
             "reward": {"vshape": (1,)},
             "terminated": {"vshape": (1,), "dtype": th.uint8},
         }
+        print(f'task: {task}, scheme: {scheme}') 
         groups = {
             "agents": task_args.n_agents
         }

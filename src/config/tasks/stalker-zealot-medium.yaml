@@ -12,7 +12,7 @@ train_tasks_data_quality: {
     "3s5z": "medium",
 }
 
-test_tasks: ["1s3z", "1s4z", "1s5z", "2s3z", "2s4z", "2s5z", "3s3z", "3s4z", "3s5z", "4s3z", "4s4z", "4s5z", "4s6z"]
+test_tasks: ["2s3z","3m", "5m","10m","5m_vs_6m", "9m_vs_10m"]
 test_tasks_data_quality: {
 }
 
