@@ -3,23 +3,23 @@
 # get env information
 env: "sc2"
 # get task information
-task: "marine-hard-medium"
+task: "marine-hard-stalker-zealot"
 # define train tasks and test tasks
-train_tasks: ["3m", "5m_vs_6m", "9m_vs_10m"]
+train_tasks: ["3m", "5m_vs_6m", "2s3z"]
 train_tasks_data_quality: {
     "3m": "medium",
     "5m_vs_6m": "medium",
-    "9m_vs_10m": "medium",
+    "2s3z": "medium",
 }
 
-test_tasks: ["3m", "5m", "10m","5m_vs_6m", "9m_vs_10m", "2s3z", "3s5z"]
+test_tasks: ["3m", "5m", "10m","5m_vs_6m", "9m_vs_10m", "2s3z", "3s5z","2s4z"]
 test_tasks_data_quality: {
 }
 
 # define additional pretrain tasks
-pretrain_tasks: ["3m", "5m_vs_6m", "9m_vs_10m"]
+pretrain_tasks: ["3m", "5m_vs_6m", "2s3z"]
 pretrain_tasks_data_quality: {
     "3m": "medium",
     "5m_vs_6m": "medium",
-    "9m_vs_10m": "medium",
+    "2s3z": "medium",
 }
