@@ -163,7 +163,7 @@ if __name__ == '__main__':
         )
     os.makedirs(results_save_dir, exist_ok=True)
     config_dict['results_save_dir'] = results_save_dir
-    config_dict['pretrain_save_dir'] = os.path.join(dirname(results_save_dir), 'pretrain-models')
+    config_dict['pretrain_save_dir'] = os.path.join(results_save_dir, 'pretrain-models')
 
     # Save to disk by default for sacred
     file_obs_path = os.path.join(results_save_dir, "sacred")
