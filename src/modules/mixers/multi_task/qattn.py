@@ -20,14 +20,18 @@ class QMixer(nn.Module):
         # get action dimension information
         self.n_actions_no_attack = surrogate_decomposer.n_actions_no_attack
 
+        self.ally_encoder_in = state_nf_al
+        self.enemy_encoder_in = state_nf_en
+
         # define state information processor
         if self.state_last_action:
-            self.ally_encoder = nn.Linear(state_nf_al + self.n_actions_no_attack + 1, self.entity_embed_dim)
-            self.enemy_encoder = nn.Linear(state_nf_en, self.entity_embed_dim)
+            self.ally_encoder_in = self.n_actions_no_attack + 1
+            self.ally_encoder = nn.Linear(self.ally_encoder_in, self.entity_embed_dim)
+            self.enemy_encoder = nn.Linear(self.enemy_encoder_in, self.entity_embed_dim)
             state_nf_al += self.n_actions_no_attack + 1
         else:
-            self.ally_encoder = nn.Linear(state_nf_al, self.entity_embed_dim)
-            self.enemy_encoder = nn.Linear(state_nf_en, self.entity_embed_dim)
+            self.ally_encoder = nn.Linear( self.ally_encoder_in, self.entity_embed_dim)
+            self.enemy_encoder = nn.Linear(self.enemy_encoder_in, self.entity_embed_dim)
 
         # we ought to do attention
         self.query = nn.Linear(self.entity_embed_dim, self.attn_embed_dim)
@@ -88,6 +92,8 @@ class QMixer(nn.Module):
             ally_states = th.cat([ally_states, compact_action_states], dim=-1)
 
         # do inference and get entity_embed
+        ally_states = F.pad(ally_states, pad=(0,self.ally_encoder_in - ally_states.shape[-1] ))
+        enemy_states = F.pad(enemy_states, pad=(0,self.enemy_encoder_in - enemy_states.shape[-1] ))
         ally_embed = self.ally_encoder(ally_states)
         enemy_embed = self.enemy_encoder(enemy_states)
 
