@@ -34,8 +34,20 @@ class QLearner:
 
         self.log_stats_t = -self.args.learner_log_interval - 1
 
-    def train(self, batch: EpisodeBatch, t_env: int, episode_num: int):
+    def train(self, batch: EpisodeBatch, t_env: int, episode_num: int,task:str):
         # Get the relevant quantities
+
+        if self.training_steps == 0:
+            self._reset_optimizer()
+            for t in self.task2args:
+                task_args = self.task2args[t]
+                self.task2train_info[t]["log_stats_t"] = -task_args.learner_log_interval - 1
+
+        self.train_policy(batch, t_env, episode_num, task)
+        self.training_steps += 1
+
+    def train_policy(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+
         rewards = batch["reward"][:, :-1]
         actions = batch["actions"][:, :-1]
         terminated = batch["terminated"][:, :-1].float()
@@ -45,7 +57,7 @@ class QLearner:
 
         # Calculate estimated Q-Values
         mac_out = []
-        self.mac.init_hidden(batch.batch_size)
+        self.mac.init_hidden(batch.batch_size,task)
         for t in range(batch.max_seq_length):
             agent_outs = self.mac.forward(batch, t=t)
             mac_out.append(agent_outs)
@@ -120,6 +132,11 @@ class QLearner:
         if self.mixer is not None:
             self.target_mixer.load_state_dict(self.mixer.state_dict())
         self.logger.console_logger.info("Updated target network")
+    
+    def update(self):
+        grad_norm = th.nn.utils.clip_grad_norm_(self.params, self.main_args.grad_norm_clip)
+        self.optimiser.step()
+        self.optimiser.zero_grad()
 
     def cuda(self):
         self.mac.cuda()

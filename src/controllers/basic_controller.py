@@ -5,7 +5,7 @@ import torch as th
 
 # This multi-agent controller shares parameters between agents
 class BasicMAC:
-    def __init__(self, scheme, groups, args):
+    def __init__(self, train_tasks, task2scheme, task2args,scheme, groups, args):
         self.n_agents = args.n_agents
         self.args = args
         input_shape = self._get_input_shape(scheme)
@@ -22,9 +22,28 @@ class BasicMAC:
         agent_outputs = self.forward(ep_batch, t_ep, test_mode=test_mode)
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
         return chosen_actions
+    
+    def _build_inputs(self, batch, t, task):
+        # Assumes homogenous agents with flat observations.
+        # Other MACs might want to e.g. delegate building inputs to each agent
+        bs = batch.batch_size
+        inputs = []
+        inputs.append(batch["obs"][:, t])
+        # get args, n_agents for this specific task
+        task_args, n_agents = self.task2args[task], self.task2n_agents[task]
+        if task_args.obs_last_action:
+            if t == 0:
+                inputs.append(th.zeros_like(batch["actions_onehot"][:, t]))
+            else:
+                inputs.append(batch["actions_onehot"][:, t - 1])
+        if task_args.obs_agent_id:
+            inputs.append(th.eye(n_agents, device=batch.device).unsqueeze(0).expand(bs, -1, -1))
 
-    def forward(self, ep_batch, t, test_mode=False):
-        agent_inputs = self._build_inputs(ep_batch, t)
+        inputs = th.cat([x.reshape(bs * n_agents, -1) for x in inputs], dim=1)
+        return inputs
+
+    def forward(self, ep_batch, t, task, test_mode=False):
+        agent_inputs = self._build_inputs(ep_batch, t,task)
         avail_actions = ep_batch["avail_actions"][:, t]
         agent_outs, self.hidden_states = self.agent(agent_inputs, self.hidden_states)
 

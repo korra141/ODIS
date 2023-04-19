@@ -172,7 +172,7 @@ def train_sequential(train_tasks, main_args, logger, learner, task2args, task2ru
                     episode_sample.to(task2args[task].device)
 
                 if hasattr(learner, 'test_pretrain'):
-                    learner.test_pretrain(episode_sample, t_env, episode, task)
+                    learner.test_pretrain_q_value(episode_sample, t_env, episode, task)
                 else:
                     raise ValueError("Do test_pretrain with a learner that does not have a `test_pretrain` method!")
 
@@ -191,7 +191,7 @@ def train_sequential(train_tasks, main_args, logger, learner, task2args, task2ru
 
             if pretrain:
                 if hasattr(learner, 'pretrain'):
-                    terminated = learner.pretrain(episode_sample, t_env, episode, task)
+                    terminated = learner.pretrain_q_value(episode_sample, t_env, episode, task)
                 else:
                     raise ValueError("Do pretraining with a learner that does not have a `pretrain` method!")
             else:
@@ -228,7 +228,7 @@ def train_sequential(train_tasks, main_args, logger, learner, task2args, task2ru
                             episode_sample.to(task2args[task].device)
 
                         if hasattr(learner, 'test_pretrain'):
-                            learner.test_pretrain(episode_sample, t_env, episode, task)
+                            learner.test_pretrain_q_value(episode_sample, t_env, episode, task)
                         else:
                             raise ValueError(
                                 "Do test_pretrain with a learner that does not have a `test_pretrain` method!")

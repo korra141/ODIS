@@ -6,7 +6,7 @@ from modules.mixers.multi_task.qattn import QMixer as MTAttnQMixer
 import torch as th
 from torch.optim import RMSprop, Adam
 import torch.nn.functional as F
-import math
+import math 
 
 import os
 
@@ -83,6 +83,25 @@ class ODISLearner:
         else:
             self.optimiser.step()
             self.optimiser.zero_grad()
+    
+    def train_q_value(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+        rewards = batch["reward"][:, :]
+        actions = batch["actions"][:, :]
+        terminated = batch["terminated"][:, :].float()
+        mask = batch["filled"][:, :].float()
+        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        avail_actions = batch["avail_actions"]
+
+        # Calculate estimated Q-Values
+        mac_out = []
+        self.mac.init_hidden(batch.batch_size, task)
+        for t in range(batch.max_seq_length):
+            agent_outs = self.mac.forward_skill(batch, t=t, task=task, actions=actions[:, t, :])
+            mac_out.append(agent_outs)
+        mac_out = th.stack(mac_out, dim=1)  # Concat over time
+        
+        self.task2train_info[task]["log_stats_t"] = t_env
+
 
     def train_vae(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
         rewards = batch["reward"][:, :]
@@ -116,7 +135,7 @@ class ODISLearner:
         vae_loss = dec_loss / (batch.max_seq_length - self.c) + self.main_args.beta * enc_loss
         loss = vae_loss
 
-        # self.optimiser.zero_grad()
+        self.optimiser.zero_grad()
         loss.backward()
 
         # self.optimiser.step()
@@ -134,6 +153,22 @@ class ODISLearner:
             
             self.task2train_info[task]["log_stats_t"] = t_env
 
+    def test_q_values(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+        rewards = batch["reward"][:, :]
+        actions = batch["actions"][:, :]
+        terminated = batch["terminated"][:, :].float()
+        mask = batch["filled"][:, :].float()
+        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        avail_actions = batch["avail_actions"]
+
+        # Calculate estimated Q-Values
+        mac_out = []
+        self.mac.init_hidden(batch.batch_size, task)
+        for t in range(batch.max_seq_length):
+            agent_outs = self.mac.forward_skill(batch, t=t, task=task, actions=actions[:, t, :])
+            mac_out.append(agent_outs)
+        mac_out = th.stack(mac_out, dim=1)  # Concat over time
+
     def test_vae(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
         rewards = batch["reward"][:, :]
         actions = batch["actions"][:, :]
@@ -150,7 +185,7 @@ class ODISLearner:
             mac_out.append(agent_outs)
         mac_out = th.stack(mac_out, dim=1)  # Concat over time
 
-        ######## beta-vae loss
+        ####### beta-vae loss
         # prior loss
         seq_skill_input = F.gumbel_softmax(mac_out[:, :-self.c, :, :], dim=-1)
         kl_seq_skill = seq_skill_input * (th.log(seq_skill_input) - math.log(1 / self.main_args.skill_dim))
@@ -175,6 +210,7 @@ class ODISLearner:
             self.logger.log_stat(f"pretrain/{task}/test_skill_class{i+1}", skill_dist[i].item(), t_env)
 
     def train_policy(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+
         # Get the relevant quantities
         rewards = batch["reward"][:, :]
         actions = batch["actions"][:, :]
@@ -184,30 +220,30 @@ class ODISLearner:
         # avail_actions = batch["avail_actions"]
 
         #### encode action
-        with th.no_grad():
-            new_actions = []
-            self.mac.init_hidden(batch.batch_size, task)
-            for t in range(batch.max_seq_length):
-                action = self.mac.forward_skill(batch, t=t, task=task, actions=actions[:, t, :])
-                label_action = action.max(dim=-1)[1].unsqueeze(-1)
-                new_actions.append(label_action)
-            actions = th.stack(new_actions, dim=1)
-        ####
+        # with th.no_grad():
+        #     new_actions = []
+        #     self.mac.init_hidden(batch.batch_size, task)
+        #     for t in range(batch.max_seq_length):
+        #         action = self.mac.forward_skill(batch, t=t, task=task, actions=actions[:, t, :])
+        #         label_action = action.max(dim=-1)[1].unsqueeze(-1)
+        #         new_actions.append(label_action)
+        #     actions = th.stack(new_actions, dim=1)
+        # ####
 
         #### representation
-        mac_out_obs = []
+        # mac_out_obs = []
         mac_out = []
         self.mac.init_hidden(batch.batch_size, task)
         for t in range(batch.max_seq_length):
-            agent_outs, pri_outs = self.mac.forward_both(batch, t=t, task=task)
+            agent_outs = self.mac.forward(batch, t=t, task=task)
             mac_out.append(agent_outs)
-            mac_out_obs.append(pri_outs)
+            # mac_out_obs.append(pri_outs)
 
         mac_out = th.stack(mac_out, dim=1)  # Concat over time
         _, _, n_agents, _ = mac_out.size()
-        mac_out_obs = th.stack(mac_out_obs, dim=1)  # Concat over time
-        dist_loss = F.cross_entropy(mac_out_obs.reshape(-1, self.skill_dim),
-                                    actions.reshape(-1), reduction="sum") / mask.sum() / n_agents
+        # mac_out_obs = th.stack(mac_out_obs, dim=1)  # Concat over time
+        # dist_loss = F.cross_entropy(mac_out_obs.reshape(-1, self.skill_dim),
+        #                             actions.reshape(-1), reduction="sum") / mask.sum() / n_agents
 
         # Pick the Q-Values for the actions taken by each agent
         chosen_action_qvals = th.gather(mac_out[:, :], dim=3, index=actions[:, :]).squeeze(3)  # Remove the last dim
@@ -216,7 +252,7 @@ class ODISLearner:
         target_mac_out = []
         self.target_mac.init_hidden(batch.batch_size, task)
         for t in range(batch.max_seq_length):
-            target_agent_outs = self.target_mac.forward_qvalue(batch, t=t, task=task)
+            target_agent_outs = self.target_mac.forward(batch, t=t, task=task)
             target_mac_out.append(target_agent_outs)
 
         # We don't need the first timesteps Q-Value estimate for calculating targets
@@ -233,11 +269,11 @@ class ODISLearner:
             cur_max_actions = mac_out_detach[:, :].max(dim=3, keepdim=True)[1]
             target_max_qvals = th.gather(target_mac_out, 3, cur_max_actions).squeeze(3)
 
-            cons_max_qvals = th.gather(mac_out, 3, cur_max_actions).squeeze(3)
+            # cons_max_qvals = th.gather(mac_out, 3, cur_max_actions).squeeze(3)
             # cons_error = (cons_max_qvals - chosen_action_qvals).mean(dim=-1, keepdim=True)
         else:
             target_max_qvals = target_mac_out.max(dim=3)[0]
-            cons_error = None
+            # cons_error = None
 
         # Mix
         bs, seq_len = chosen_action_qvals.size(0), chosen_action_qvals.size(1)
@@ -249,8 +285,8 @@ class ODISLearner:
             target_max_qvals = self.target_mixer(target_max_qvals, batch["state"][:, :],
                                                  self.task2decomposer[task])
 
-            cons_max_qvals = self.mixer(cons_max_qvals, batch["state"][:, :],
-                                        self.task2decomposer[task])
+            # cons_max_qvals = self.mixer(cons_max_qvals, batch["state"][:, :],
+                                        # self.task2decomposer[task])
 
         # Calculate c-step Q-Learning targets
         cs_rewards = batch["reward"]
@@ -264,24 +300,26 @@ class ODISLearner:
         td_error = (chosen_action_qvals[:, :-self.c] - targets.detach())
 
         # # Cons-error
-        cons_error = (cons_max_qvals - chosen_action_qvals)
+        # cons_error = (cons_max_qvals - chosen_action_qvals)
 
-        mask = mask[:, :].expand_as(cons_error)
+        # mask = mask[:, :].expand_as(cons_error)
 
         # 0-out the targets that came from padded data
-        masked_td_error = td_error * mask[:, :-self.c]
-        masked_cons_error = cons_error * mask
+        mask = mask.expand_as(td_error)
+
+        # 0-out the targets that came from padded data
+        masked_td_error = td_error * mask
+        # masked_cons_error = cons_error * mask
 
         # Normal L2 loss, take mean over actual data
-        td_loss = (masked_td_error ** 2).sum() / mask[:, :-self.c].sum()
-        cons_loss = masked_cons_error.sum() / mask.sum()
-        loss = td_loss + self.alpha * cons_loss + self.phi * dist_loss
+        loss = (masked_td_error ** 2).sum() / mask[:, :-self.c].sum()
+        # cons_loss = masked_cons_error.sum() / mask.sum()
 
         # Do RL Learning
-        self.mac.agent.encoder.requires_grad_(False)
-        self.mac.agent.state_encoder.requires_grad_(False)
-        self.mac.agent.decoder.requires_grad_(False)
-        # self.optimiser.zero_grad()
+        # self.mac.agent.encoder.requires_grad_(False)
+        # self.mac.agent.state_encoder.requires_grad_(False)
+        # self.mac.agent.decoder.requires_grad_(False)
+        self.optimiser.zero_grad()
         loss.backward()
         # grad_norm = th.nn.utils.clip_grad_norm_(self.params, self.main_args.grad_norm_clip)
         # self.optimiser.step()
@@ -293,9 +331,9 @@ class ODISLearner:
 
         if t_env - self.task2train_info[task]["log_stats_t"] >= self.task2args[task].learner_log_interval:
             self.logger.log_stat(f"{task}/loss", loss.item(), t_env)
-            self.logger.log_stat(f"{task}/td_loss", td_loss.item(), t_env)
-            self.logger.log_stat(f"{task}/cons_loss", cons_loss.item(), t_env)
-            self.logger.log_stat(f"{task}/dist_loss", dist_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/td_loss", td_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/cons_loss", cons_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/dist_loss", dist_loss.item(), t_env)
             # self.logger.log_stat(f"{task}/grad_norm", grad_norm.item(), t_env)
             mask_elems = mask.sum().item()
             self.logger.log_stat(f"{task}/td_error_abs", (masked_td_error.abs().sum().item() / mask_elems), t_env)
@@ -304,6 +342,16 @@ class ODISLearner:
             self.logger.log_stat(f"{task}/target_mean",
                                  (targets * mask[:, :-self.c]).sum().item() / (mask_elems * self.task2args[task].n_agents), t_env)
             self.task2train_info[task]["log_stats_t"] = t_env
+    
+    def pretrain_q_value(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+        if self.pretrain_steps == 0:
+            self._reset_optimizer()
+            for t in self.task2args:
+                task_args = self.task2args[t]
+                self.task2train_info[t]["log_stats_t"] = -task_args.learner_log_interval - 1
+        
+        self.train_q_value(batch, t_env, episode_num, task)
+        self.pretrain_steps += 1
 
     def pretrain(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
         if self.pretrain_steps == 0:
@@ -317,6 +365,9 @@ class ODISLearner:
     
     def test_pretrain(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
         self.test_vae(batch, t_env, episode_num, task)
+
+    def test_pretrain_q_value(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
+        self.test_q_values(batch, t_env, episode_num, task)
     
     def train(self, batch: EpisodeBatch, t_env: int, episode_num: int, task: str):
         if self.training_steps == 0:
