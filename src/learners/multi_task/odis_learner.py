@@ -1,3 +1,4 @@
+import pdb
 import copy
 from components.episode_buffer import EpisodeBatch
 from modules.mixers.multi_task.vdn import VDNMixer
@@ -108,7 +109,7 @@ class ODISLearner:
         actions = batch["actions"][:, :]
         terminated = batch["terminated"][:, :].float()
         mask = batch["filled"][:, :].float()
-        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        mask_1 = mask[:, 1:] * (1 - terminated[:, :-1])
         avail_actions = batch["avail_actions"]
 
         # Calculate estimated Q-Values
@@ -130,7 +131,7 @@ class ODISLearner:
         for t in range(batch.max_seq_length-self.c):
             seq_action_output = self.mac.forward_seq_action(batch, seq_skill_input[:, t, :, :], t, task=task)
             b, c, n, a = seq_action_output.size()
-            dec_loss += (F.cross_entropy(seq_action_output.reshape(-1, a), actions[:, t:t + self.c].squeeze(-1).reshape(-1), reduction="sum") / mask[:, t:t + self.c].sum()) / n
+            dec_loss += (F.cross_entropy(seq_action_output.reshape(-1, a), actions[:, t:t + self.c].squeeze(-1).reshape(-1), reduction="sum") / mask_1[:, t:t + self.c].sum()) / n
 
         vae_loss = dec_loss / (batch.max_seq_length - self.c) + self.main_args.beta * enc_loss
         loss = vae_loss
@@ -174,7 +175,7 @@ class ODISLearner:
         actions = batch["actions"][:, :]
         terminated = batch["terminated"][:, :].float()
         mask = batch["filled"][:, :].float()
-        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        mask_1 = mask[:, 1:] * (1 - terminated[:, :-1])
         avail_actions = batch["avail_actions"]
 
         # Calculate estimated Q-Values
@@ -196,7 +197,7 @@ class ODISLearner:
         for t in range(batch.max_seq_length-self.c):
             seq_action_output = self.mac.forward_seq_action(batch, seq_skill_input[:, t, :, :], t, task=task)
             b, c, n, a = seq_action_output.size()
-            dec_loss += (F.cross_entropy(seq_action_output.reshape(-1, a), actions[:, t:t + self.c].squeeze(-1).reshape(-1), reduction="sum") / mask[:, t:t + self.c].sum()) / n
+            dec_loss += (F.cross_entropy(seq_action_output.reshape(-1, a), actions[:, t:t + self.c].squeeze(-1).reshape(-1), reduction="sum") / mask_1[:, t:t + self.c].sum()) / n
 
         vae_loss = dec_loss / (batch.max_seq_length - self.c) + self.main_args.beta * enc_loss
         loss = vae_loss
@@ -214,9 +215,11 @@ class ODISLearner:
         # Get the relevant quantities
         rewards = batch["reward"][:, :]
         actions = batch["actions"][:, :]
-        terminated = batch["terminated"][:, :].float()
-        mask = batch["filled"][:, :-1].float()
-        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        terminated = batch["terminated"][:, :-1].float()
+        # pdb.set_trace()
+        mask = batch["filled"][:, :].float()
+        mask[:, :-1] = mask[:, :-1] * (1 - terminated)
+
         # avail_actions = batch["avail_actions"]
 
         #### encode action
@@ -293,11 +296,11 @@ class ODISLearner:
         for i in range(1, self.c):
             cs_rewards[:, :-self.c] += rewards[:, i:-(self.c - i)]
         # cs_rewards /= self.c
-
-        targets = cs_rewards[:, :-self.c] + self.main_args.gamma * (1 - terminated[:, self.c - 1:-1]) * target_max_qvals[:, self.c:]
+        targets = cs_rewards[:, :-self.c] + self.main_args.gamma * (1 - terminated[:, self.c - 1:]) * target_max_qvals[:, self.c:]
 
         # Td-error
         td_error = (chosen_action_qvals[:, :-self.c] - targets.detach())
+    
 
         # # Cons-error
         # cons_error = (cons_max_qvals - chosen_action_qvals)
@@ -305,14 +308,15 @@ class ODISLearner:
         # mask = mask[:, :].expand_as(cons_error)
 
         # 0-out the targets that came from padded data
-        mask = mask.expand_as(td_error)
+        # pdb.set_trace()
+        mask_1 = mask[:,:-1].expand_as(td_error)
 
         # 0-out the targets that came from padded data
-        masked_td_error = td_error * mask
+        masked_td_error = td_error * mask_1
         # masked_cons_error = cons_error * mask
 
         # Normal L2 loss, take mean over actual data
-        loss = (masked_td_error ** 2).sum() / mask[:, :-self.c].sum()
+        loss = (masked_td_error ** 2).sum() / mask_1[:, :-self.c].sum()
         # cons_loss = masked_cons_error.sum() / mask.sum()
 
         # Do RL Learning
@@ -335,10 +339,10 @@ class ODISLearner:
             # self.logger.log_stat(f"{task}/cons_loss", cons_loss.item(), t_env)
             # self.logger.log_stat(f"{task}/dist_loss", dist_loss.item(), t_env)
             # self.logger.log_stat(f"{task}/grad_norm", grad_norm.item(), t_env)
-            mask_elems = mask.sum().item()
+            mask_elems = mask_1.sum().item()
             self.logger.log_stat(f"{task}/td_error_abs", (masked_td_error.abs().sum().item() / mask_elems), t_env)
-            self.logger.log_stat(f"{task}/q_taken_mean", (chosen_action_qvals * mask).sum().item() / (
-                        mask_elems * self.task2args[task].n_agents), t_env)
+            #self.logger.log_stat(f"{task}/q_taken_mean", (chosen_action_qvals * mask).sum().item() / (
+             #           mask_elems * self.task2args[task].n_agents), t_env)
             self.logger.log_stat(f"{task}/target_mean",
                                  (targets * mask[:, :-self.c]).sum().item() / (mask_elems * self.task2args[task].n_agents), t_env)
             self.task2train_info[task]["log_stats_t"] = t_env

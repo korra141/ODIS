@@ -10,7 +10,6 @@ from os.path import dirname, abspath
 import copy
 import json
 import shutil
-
 from learners.multi_task import REGISTRY as le_REGISTRY
 from runners.multi_task import REGISTRY as r_REGISTRY
 from controllers.multi_task import REGISTRY as mac_REGISTRY
@@ -342,7 +341,7 @@ def run_sequential(args, logger):
         logger.console_logger.info(
             "Beginning pre-training with {} timesteps for each task".format(main_args.pretrain_steps))
         train_sequential(main_args.pretrain_tasks, main_args, logger, learner, task2args, task2runner, task2offlinedata,
-                         pretrain=True, test_task2offlinedata=test_task2offlinedata)
+                         pretrain=main_args.pretrain, test_task2offlinedata=test_task2offlinedata)
         logger.console_logger.info(f"Finished pretraining")
         test_task2offlinedata = None  # free memory
 
