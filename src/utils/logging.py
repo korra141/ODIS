@@ -7,7 +7,7 @@ class Logger:
     def __init__(self, console_logger):
         self.console_logger = console_logger
 
-        self.use_tb = False
+        self.use_tb = True
         self.use_sacred = False
         self.use_hdf = False
 

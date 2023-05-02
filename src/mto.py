@@ -277,14 +277,14 @@ def run_sequential(args, logger):
 
     # define mac
     mac = mac_REGISTRY[main_args.mac](train_tasks=all_tasks, task2scheme=task2buffer_scheme, task2args=task2args,
-                                      main_args=main_args)
+                                      main_args=main_args,logger=logger)
 
     for task in main_args.test_tasks:
         task2runner[task].setup(scheme=task2scheme[task], groups=task2groups[task], preprocess=task2preprocess[task],
                                 mac=mac)
 
     # define learner
-    learner = le_REGISTRY[main_args.learner](mac, logger, main_args)
+    learner = le_REGISTRY[main_args.learner](mac, logger,main_args)
 
     if main_args.use_cuda:
         learner.cuda()

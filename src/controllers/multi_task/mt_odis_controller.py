@@ -6,15 +6,18 @@ import torch as th
 import torch.distributions as D
 import numpy as np
 import torch.nn.functional as F
+from copy import deepcopy
+import pdb
 
 
 # This multi-agent controller shares parameters between agents
 class ODISMAC:
-    def __init__(self, train_tasks, task2scheme, task2args, main_args):
+    def __init__(self, train_tasks, task2scheme, task2args, main_args,logger):
         # set some task-specific attributes
         self.train_tasks = train_tasks
         self.task2scheme = task2scheme
         self.task2args = task2args
+        self.logger = logger
         self.task2n_agents = {task: self.task2args[task].n_agents for task in train_tasks}
         self.main_args = main_args
 
@@ -50,11 +53,35 @@ class ODISMAC:
         self.skill_dim = main_args.skill_dim
         self.c_step = main_args.c_step
 
-    def select_actions(self, ep_batch, t_ep, t_env, task, bs=slice(None), test_mode=False):
+    def __deepcopy__(self, memo):
+        # create a copy with self.linked_to *not copied*, just referenced.
+        return ODISMAC(deepcopy(self.train_tasks, memo), deepcopy(self.task2scheme,memo), deepcopy(self.task2args,memo), deepcopy(self.main_args, memo), self.logger)
+
+    def select_actions(self, ep_batch, t_ep, t_env, task, transition=None, bs=slice(None),test_mode=False):
         # Only select actions for the selected batch elements in bs
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        agent_outputs = self.forward(ep_batch, t_ep, task, test_mode=test_mode)
+        agent_outputs,skill = self.forward(ep_batch, t_ep, task, test_mode=test_mode)
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
+        if test_mode:
+            training_type = "testing"
+        else :
+            training_type = "training"
+        if transition:
+            transition_type = "post_transition"
+        else :
+            transition_type = "pre_transition"
+        # pdb.set_trace()
+        # print(t_env)
+        for i in range(self.task2n_agents[task]) : 
+            # self.logger.log_histogram(f'{task}_{training_type}_action_prob_{i}_{transition_type}', agent_outputs.max(dim=2)[0].data[0][i].item())
+            # self.logger.log_histogram(f'{task}_{training_type}_skill_{i}_{transition_type}', skill.max(dim=1)[0].data[i].item())
+            # self.logger.log_histogram(f'{task}_{training_type}_action_{i}_{transition_type}', chosen_actions.data[0][i].item())
+            # self.logger.log_stat(f'{task}_{training_type}_skill_{i}_{transition_type}', skill.max(dim=1)[0].data[i].item())
+            # self.logger.log_stat(f'{task}_{training_type}_action_prob_{i}_{transition_type}', agent_outputs.max(dim=2)[0].data[0][i].item())
+            # self.logger.log_stat(f'{task}_{training_type}_action_{i}_{transition_type}', chosen_actions.data[0][i].item())
+            self.logger.log_stat(f'{task}_{training_type}_agent_{i}_{transition_type}_skill_{skill.max(dim=1)[0].data[i].item()}', agent_outputs.max(dim=2)[0].data[0][i].item(),t_env)
+
+            
         return chosen_actions
 
     def forward_qvalue(self, ep_batch, t, task, test_mode=False):
@@ -92,7 +119,7 @@ class ODISMAC:
 
         agent_seq_outs, self.hidden_states_dec = self.agent.forward_seq_action(agent_seq_inputs, self.hidden_states_dec, task, skill_action)
 
-        return agent_seq_outs.view(ep_batch.batch_size, self.c_step, self.task2n_agents[task], -1)
+        return agent_seq_outs.view(ep_batch.batch_size, self.c_step, self.task2n_agents[task], -1),agent_seq_inputs
 
     def forward(self, ep_batch, t, task, test_mode=False):
         agent_inputs = self._build_inputs(ep_batch, t, task)
@@ -130,7 +157,7 @@ class ODISMAC:
                     # Zero out the unavailable actions
                     agent_outs[reshaped_avail_actions == 0] = 0.0
 
-        return agent_outs.view(ep_batch.batch_size, self.task2n_agents[task], -1)
+        return agent_outs.view(ep_batch.batch_size, self.task2n_agents[task], -1),self.skill
 
     def init_hidden(self, batch_size, task):
         # we always know we are in which task when do init_hidden
