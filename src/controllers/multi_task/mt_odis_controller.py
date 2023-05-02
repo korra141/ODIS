@@ -79,7 +79,7 @@ class ODISMAC:
             # self.logger.log_stat(f'{task}_{training_type}_skill_{i}_{transition_type}', skill.max(dim=1)[0].data[i].item())
             # self.logger.log_stat(f'{task}_{training_type}_action_prob_{i}_{transition_type}', agent_outputs.max(dim=2)[0].data[0][i].item())
             # self.logger.log_stat(f'{task}_{training_type}_action_{i}_{transition_type}', chosen_actions.data[0][i].item())
-            self.logger.log_stat(f'{task}_{training_type}_agent_{i}_{transition_type}_skill_{skill.max(dim=1)[0].data[i].item()}', agent_outputs.max(dim=2)[0].data[0][i].item(),t_env)
+            self.logger.log_stat(f'{task}_{training_type}_agent_{i}_{transition_type}_skill_{skill.max(dim=1)[1].data[i].item()}', agent_outputs.max(dim=2)[0].data[0][i].item(),t_env)
 
             
         return chosen_actions
