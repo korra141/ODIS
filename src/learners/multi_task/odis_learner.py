@@ -123,10 +123,10 @@ class ODISLearner:
 
         if t_env - self.task2train_info[task]["log_stats_t"] >= self.task2args[task].learner_log_interval:
             # self.logger.log_stat(f"pretrain/{task}/grad_norm", grad_norm.item(), t_env)
-            self.logger.log_stat(f"pretrain/{task}/vae_loss", vae_loss.item(), t_env)
-            # self.logger.log_stat(f"pretrain/{task}/dist_loss", dist_loss.item(), t_env)
-            self.logger.log_stat(f"pretrain/{task}/enc_loss", enc_loss.item(), t_env)
-            self.logger.log_stat(f"pretrain/{task}/dec_loss", dec_loss.item(), t_env)
+            # self.logger.log_stat(f"pretrain/{task}/vae_loss", vae_loss.item(), t_env)
+            # # self.logger.log_stat(f"pretrain/{task}/dist_loss", dist_loss.item(), t_env)
+            # self.logger.log_stat(f"pretrain/{task}/enc_loss", enc_loss.item(), t_env)
+            # self.logger.log_stat(f"pretrain/{task}/dec_loss", dec_loss.item(), t_env)
 
             for i in range(self.skill_dim):
                 skill_dist = seq_skill_input.reshape(-1, self.skill_dim).mean(dim=0)
@@ -166,9 +166,9 @@ class ODISLearner:
         vae_loss = dec_loss / (batch.max_seq_length - self.c) + self.main_args.beta * enc_loss
         loss = vae_loss
 
-        self.logger.log_stat(f"pretrain/{task}/test_vae_loss", loss.item(), t_env)
-        self.logger.log_stat(f"pretrain/{task}/test_enc_loss", enc_loss.item(), t_env)
-        self.logger.log_stat(f"pretrain/{task}/test_dec_loss", dec_loss.item(), t_env)
+        # self.logger.log_stat(f"pretrain/{task}/test_vae_loss", loss.item(), t_env)
+        # self.logger.log_stat(f"pretrain/{task}/test_enc_loss", enc_loss.item(), t_env)
+        # self.logger.log_stat(f"pretrain/{task}/test_dec_loss", dec_loss.item(), t_env)
 
         for i in range(self.skill_dim):
             skill_dist = seq_skill_input.reshape(-1, self.skill_dim).mean(dim=0)
@@ -293,12 +293,12 @@ class ODISLearner:
 
         if t_env - self.task2train_info[task]["log_stats_t"] >= self.task2args[task].learner_log_interval:
             self.logger.log_stat(f"{task}/loss", loss.item(), t_env)
-            self.logger.log_stat(f"{task}/td_loss", td_loss.item(), t_env)
-            self.logger.log_stat(f"{task}/cons_loss", cons_loss.item(), t_env)
-            self.logger.log_stat(f"{task}/dist_loss", dist_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/td_loss", td_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/cons_loss", cons_loss.item(), t_env)
+            # self.logger.log_stat(f"{task}/dist_loss", dist_loss.item(), t_env)
             # self.logger.log_stat(f"{task}/grad_norm", grad_norm.item(), t_env)
             mask_elems = mask.sum().item()
-            self.logger.log_stat(f"{task}/td_error_abs", (masked_td_error.abs().sum().item() / mask_elems), t_env)
+            # self.logger.log_stat(f"{task}/td_error_abs", (masked_td_error.abs().sum().item() / mask_elems), t_env)
             self.logger.log_stat(f"{task}/q_taken_mean", (chosen_action_qvals * mask).sum().item() / (
                         mask_elems * self.task2args[task].n_agents), t_env)
             self.logger.log_stat(f"{task}/target_mean",
